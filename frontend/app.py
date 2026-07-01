@@ -11,11 +11,12 @@ sys.path.append(str(PROJECT_ROOT))
 # Imports
 # ---------------------------
 import streamlit as st
+import requests
+
 from ml.parser import extract_text
-from ml.skill_extractor import extract_skills
-from ml.similarity import compare_skills
-from ml.ats_score import calculate_ats_score
-from ml.gemini_service import generate_feedback
+from ml.pdf_report import create_pdf_report
+from frontend.auth import require_login, get_auth_headers
+
 # ---------------------------
 # Page Configuration
 # ---------------------------
@@ -24,6 +25,11 @@ st.set_page_config(
     page_icon="📄",
     layout="centered"
 )
+
+# ---------------------------
+# Require Login
+# ---------------------------
+require_login()
 
 # ---------------------------
 # Header
@@ -75,12 +81,7 @@ if st.button("🚀 Analyze Resume", use_container_width=True):
     else:
 
         # -----------------------------
-        # Extract Resume Text
-        # -----------------------------
-        resume_text = extract_text(resume_file)
-
-        # -----------------------------
-        # Extract Job Description Text
+        # Read Job Description
         # -----------------------------
         if jd_file:
             jd_text_content = extract_text(jd_file)
@@ -88,97 +89,120 @@ if st.button("🚀 Analyze Resume", use_container_width=True):
             jd_text_content = jd_text
 
         # -----------------------------
-        # Extract Skills
+        # Call FastAPI Backend (with auth token)
         # -----------------------------
-        resume_skills = extract_skills(resume_text)
-        jd_skills = extract_skills(jd_text_content)
-
-        # -----------------------------
-        # Compare Skills
-        # -----------------------------
-        comparison = compare_skills(resume_skills, jd_skills)
-        ats_score, breakdown = calculate_ats_score(
-            comparison,
-            resume_text,
-            jd_text_content
-        )
-        # -----------------------------
-        # ATS Score
-        # -----------------------------
-        st.header("🎯 ATS Score")
-
-        st.metric(
-            "Overall ATS Score",
-            f"{ats_score}/100"
+        response = requests.post(
+            "http://127.0.0.1:8000/student/analyze",
+            headers=get_auth_headers(),
+            files={
+                "resume": (
+                    resume_file.name,
+                    resume_file,
+                    resume_file.type
+                )
+            },
+            data={
+                "job_description": jd_text_content
+            }
         )
 
-        st.subheader("📊 Score Breakdown")
+        if response.status_code == 401:
+            st.error("Your session expired. Please log in again.")
+            from frontend.auth import logout
+            logout()
+            st.rerun()
 
-        st.write(breakdown)
-        # -----------------------------
-        # Success Message
-        # -----------------------------
-        st.success("✅ Files uploaded successfully!")
+        elif response.status_code != 200:
+            st.error("Backend Error")
+            st.write(response.text)
+            st.stop()
 
-        # -----------------------------
-        # Display Resume Text
-        # -----------------------------
-        st.subheader("📄 Extracted Resume")
+        else:
+            result = response.json()
 
-        st.text_area(
-            "Resume Text",
-            resume_text,
-            height=250
-        )
+            # -----------------------------
+            # Unpack Response
+            # -----------------------------
+            resume_text = result["resume_text"]
+            resume_skills = result["resume_skills"]
+            jd_skills = result["jd_skills"]
 
-        # -----------------------------
-        # Display Job Description
-        # -----------------------------
-        st.subheader("📋 Extracted Job Description")
+            matched = result["matched_skills"]
+            missing = result["missing_skills"]
+            extra = result["extra_skills"]
 
-        st.text_area(
-            "Job Description",
-            jd_text_content,
-            height=250
-        )
+            match_percentage = result["match_percentage"]
+            ats_score = result["ats_score"]
+            breakdown = result["breakdown"]
 
-        # -----------------------------
-        # Display Resume Skills
-        # -----------------------------
-        st.subheader("🧠 Resume Skills")
-        st.write(resume_skills)
+            feedback = result["feedback"]
+            optimized_resume = result["optimized_resume"]
 
-        # -----------------------------
-        # Display JD Skills
-        # -----------------------------
-        st.subheader("📌 Job Description Skills")
-        st.write(jd_skills)
-        feedback = generate_feedback(
-            resume_text,
-            jd_text_content,
-            ats_score,
-            comparison["matched"],
-            comparison["missing"]
-        )
-        st.header("🤖 AI Resume Feedback")
+            # -----------------------------
+            # ATS Score
+            # -----------------------------
+            st.header("🎯 ATS Score")
 
-        st.write(feedback)
-        # -----------------------------
-        # Skill Comparison
-        # -----------------------------
-        st.subheader("✅ Matched Skills")
-        st.write(comparison["matched"])
+            st.metric(
+                "Overall ATS Score",
+                f"{ats_score}/100"
+            )
 
-        st.subheader("❌ Missing Skills")
-        st.write(comparison["missing"])
+            st.subheader("📊 Score Breakdown")
+            st.write(breakdown)
 
-        st.subheader("⭐ Extra Skills")
-        st.write(comparison["extra"])
+            # -----------------------------
+            # AI Feedback
+            # -----------------------------
+            st.header("🤖 AI Resume Feedback")
+            st.write(feedback)
 
-        # -----------------------------
-        # Skill Match Percentage
-        # -----------------------------
-        st.metric(
-            label="📊 Skill Match Percentage",
-            value=f"{comparison['match_percentage']}%"
-        )
+            # -----------------------------
+            # Skill Comparison
+            # -----------------------------
+            st.subheader("✅ Matched Skills")
+            st.write(matched)
+
+            st.subheader("❌ Missing Skills")
+            st.write(missing)
+
+            st.subheader("⭐ Extra Skills")
+            st.write(extra)
+
+            st.metric(
+                label="📊 Skill Match Percentage",
+                value=f"{match_percentage}%"
+            )
+
+            # -----------------------------
+            # Optimized Resume
+            # -----------------------------
+            st.markdown("---")
+            st.header("✨ ATS Optimized Resume")
+
+            st.text_area(
+                "Optimized Resume",
+                optimized_resume,
+                height=500
+            )
+
+            # -----------------------------
+            # PDF Report Download
+            # -----------------------------
+            create_pdf_report(
+                "ATS_Report.pdf",
+                ats_score,
+                resume_skills,
+                jd_skills,
+                matched,
+                missing,
+                feedback
+            )
+
+            with open("ATS_Report.pdf", "rb") as pdf_file:
+                st.download_button(
+                    label="📥 Download ATS Report",
+                    data=pdf_file,
+                    file_name="ATS_Report.pdf",
+                    mime="application/pdf"
+                )
