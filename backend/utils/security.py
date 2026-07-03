@@ -56,3 +56,42 @@ def decode_access_token(token: str):
     except JWTError:
         return None
 
+
+# -----------------------------
+# Password Reset Token
+# (separate, short-lived, purpose-tagged token —
+#  cannot be used to access protected routes)
+# -----------------------------
+RESET_TOKEN_EXPIRE_MINUTES = 30
+
+
+def create_reset_token(user_id: int) -> str:
+    to_encode = {
+        "user_id": user_id,
+        "purpose": "password_reset"
+    }
+
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=RESET_TOKEN_EXPIRE_MINUTES
+    )
+    to_encode.update({"exp": expire})
+
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_reset_token(token: str):
+    """
+    Returns the payload only if the token is valid AND
+    was specifically created for password resets.
+    """
+    payload = decode_access_token(token)
+
+    if payload is None:
+        return None
+
+    if payload.get("purpose") != "password_reset":
+        return None
+
+    return payload
+
+

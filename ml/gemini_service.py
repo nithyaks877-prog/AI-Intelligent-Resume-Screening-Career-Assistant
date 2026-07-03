@@ -1,4 +1,6 @@
 import os
+import json
+import re
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -128,6 +130,8 @@ Return the optimized resume in Markdown.
     response = model.generate_content(prompt)
 
     return response.text
+
+
 def candidate_summary(
     resume_text,
     jd_text,
@@ -170,3 +174,102 @@ Be concise and professional.
     response = model.generate_content(prompt)
 
     return response.text
+
+
+# =====================================================
+# AI Interview Questions
+# =====================================================
+
+def generate_interview_questions(jd_text, missing_skills):
+    """
+    Generate tailored interview questions based on the JD,
+    as structured JSON (question, category, difficulty).
+    """
+
+    prompt = f"""
+You are a technical interviewer preparing questions for a candidate
+applying to this role.
+
+Job Description:
+{jd_text}
+
+Skills the candidate is missing (focus some questions here to test
+their conceptual understanding even without hands-on experience):
+{missing_skills}
+
+Generate exactly 5 interview questions relevant to this role.
+
+Return ONLY valid JSON (no markdown, no code fences, no extra text),
+in exactly this format:
+
+[
+  {{
+    "question": "...",
+    "category": "...",
+    "difficulty": "Easy" | "Medium" | "Hard"
+  }}
+]
+"""
+
+    response = model.generate_content(prompt)
+    return _parse_json_response(response.text)
+
+
+# =====================================================
+# Personalized Learning Plan
+# =====================================================
+
+def generate_learning_plan(missing_skills):
+    """
+    Suggest courses/resources to close the candidate's
+    skill gaps, as structured JSON.
+    """
+
+    if not missing_skills:
+        return []
+
+    prompt = f"""
+You are a career mentor helping a candidate close their skill gaps.
+
+Missing skills:
+{missing_skills}
+
+For up to 3 of the most important missing skills, suggest a learning
+resource for each (a real, well-known platform/course type such as
+official docs, Coursera, Udemy, freeCodeCamp, or similar).
+
+Return ONLY valid JSON (no markdown, no code fences, no extra text),
+in exactly this format:
+
+[
+  {{
+    "title": "...",
+    "platform": "...",
+    "duration": "e.g. 2 weeks"
+  }}
+]
+"""
+
+    response = model.generate_content(prompt)
+    return _parse_json_response(response.text)
+
+
+# =====================================================
+# Helper: safely parse Gemini's JSON response
+# =====================================================
+
+def _parse_json_response(raw_text):
+    """
+    Gemini sometimes wraps JSON in ```json ... ``` code fences
+    even when told not to. This strips that before parsing,
+    and returns an empty list if parsing still fails
+    (so the API never crashes because of a malformed AI response).
+    """
+
+    cleaned = re.sub(r"^```json|^```|```$", "", raw_text.strip(), flags=re.MULTILINE)
+    cleaned = cleaned.strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        return []

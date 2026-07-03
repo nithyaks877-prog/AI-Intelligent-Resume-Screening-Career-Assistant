@@ -9,6 +9,15 @@ app = FastAPI(
     version="1.0.0",
     description="Backend API for HireSense AI"
 )
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # for development; we'll restrict this before deployment
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(student_router)
 app.include_router(recruiter_router)

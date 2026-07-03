@@ -7,7 +7,9 @@ from ml.similarity import compare_skills
 from ml.ats_score import calculate_ats_score
 from ml.gemini_service import (
     generate_feedback,
-    optimize_resume
+    optimize_resume,
+    generate_interview_questions,
+    generate_learning_plan
 )
 
 from backend.database.database import get_db
@@ -65,6 +67,17 @@ async def analyze_resume(
         job_description
     )
 
+    # AI Interview Questions
+    interview_questions = generate_interview_questions(
+        job_description,
+        comparison["missing"]
+    )
+
+    # Personalized Learning Plan
+    learning_plan = generate_learning_plan(
+        comparison["missing"]
+    )
+
     # -----------------------------
     # Save to Database
     # -----------------------------
@@ -104,7 +117,10 @@ async def analyze_resume(
         "breakdown": breakdown,
 
         "feedback": feedback,
-        "optimized_resume": optimized_resume
+        "optimized_resume": optimized_resume,
+
+        "interview_questions": interview_questions,
+        "learning_plan": learning_plan
     }
 
 
@@ -133,3 +149,4 @@ def get_resume_history(
         }
         for r in resumes
     ]
+
