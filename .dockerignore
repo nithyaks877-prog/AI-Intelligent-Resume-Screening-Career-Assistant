@@ -1,0 +1,11 @@
+venv/
+frontend/
+frontend-react/
+datasets/
+docs/
+__pycache__/
+*.pyc
+.git/
+.env
+*.md
+node_modules/
