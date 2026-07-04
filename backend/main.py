@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.routers.student import router as student_router
 from backend.routers.recruiter import router as recruiter_router
@@ -9,11 +10,13 @@ app = FastAPI(
     version="1.0.0",
     description="Backend API for HireSense AI"
 )
-from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # for development; we'll restrict this before deployment
+    allow_origins=[
+        "http://localhost:5173",
+        "https://hiresense-ai-three.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
